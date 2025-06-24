@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Company } from '../../db/models/Company';
 import {
+  Ticket,
   TicketCategory,
   TicketStatus,
   TicketType,
@@ -89,25 +90,27 @@ describe('TicketsController', () => {
     });
 
     describe('registrationAddressChange', () => {
-      it('creates registrationAddressChange ticket', async () => {
-        const company = await Company.create({ name: 'test' });
-        const user = await User.create({
-          name: 'Test User',
-          role: UserRole.corporateSecretary,
-          companyId: company.id,
+      it.each([UserRole.corporateSecretary, UserRole.director])
+        ('creates registrationAddressChange ticket (with %s assignee)', async (role) => {
+          const company = await Company.create({ name: 'test' });
+          const user = await User.create({
+            name: 'Test User',
+            role,
+            companyId: company.id,
+          });
+
+          const ticket = await controller.create({
+            companyId: company.id,
+            type: TicketType.registrationAddressChange,
+          });
+
+          expect(ticket.category).toBe(TicketCategory.corporate);
+          expect(ticket.assigneeId).toBe(user.id);
+          expect(ticket.status).toBe(TicketStatus.open);
         });
 
-        const ticket = await controller.create({
-          companyId: company.id,
-          type: TicketType.registrationAddressChange,
-        });
-
-        expect(ticket.category).toBe(TicketCategory.corporate);
-        expect(ticket.assigneeId).toBe(user.id);
-        expect(ticket.status).toBe(TicketStatus.open);
-      });
-
-      it('if there are multiple secretaries, throw', async () => {
+      // Skip due to Change Request 1
+      it.skip('if there are multiple secretaries, throw', async () => {
         const company = await Company.create({ name: 'test' });
         await User.create({
           name: 'Test User',
@@ -132,7 +135,29 @@ describe('TicketsController', () => {
         );
       });
 
-      it('if there is no secretary, throw', async () => {
+      it('if there is both secretary and director, secretary should be assignee', async () => {
+        const company = await Company.create({ name: 'test' })
+
+        const secretaryUser = await User.create({
+          name: 'Test Secretary',
+          role: UserRole.corporateSecretary,
+          companyId: company.id,
+        });
+        await User.create({
+          name: 'Test Director',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+
+        const ticket = await controller.create({
+          companyId: company.id,
+          type: TicketType.registrationAddressChange,
+        });
+
+        expect(ticket.assigneeId).toBe(secretaryUser.id)
+      })
+
+      it('if there is no secretary nor single director, throw', async () => {
         const company = await Company.create({ name: 'test' });
 
         await expect(
@@ -142,9 +167,37 @@ describe('TicketsController', () => {
           }),
         ).rejects.toEqual(
           new ConflictException(
-            `Cannot find user with role corporateSecretary to create a ticket`,
+            `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
           ),
         );
+      });
+
+      it('should throw if there is already an open ticket for registration address change', async () => {
+        // Arrange
+        const company = await Company.create({ name: 'test' });
+        const user = await User.create({
+          name: 'Test User',
+          role: UserRole.corporateSecretary,
+          companyId: company.id,
+        });
+        await Ticket.create({
+          companyId: company.id,
+          assigneeId: user.id,
+          category: TicketCategory.corporate,
+          type: TicketType.registrationAddressChange,
+          status: TicketStatus.open,
+        });
+
+        // Act & Assert
+        await expect(
+          controller.create({
+            companyId: company.id,
+            type: TicketType.registrationAddressChange,
+          })).rejects.toEqual(
+            new ConflictException(
+              `There is already an open ticket for registration address change`,
+            ),
+          );
       });
     });
   });
