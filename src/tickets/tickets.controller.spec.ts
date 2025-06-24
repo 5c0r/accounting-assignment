@@ -89,11 +89,12 @@ describe('TicketsController', () => {
     });
 
     describe('registrationAddressChange', () => {
-      it('creates registrationAddressChange ticket', async () => {
+      it.each([UserRole.corporateSecretary, UserRole.director])
+        ('creates registrationAddressChange ticket (with %s assignee)', async (role) => {
         const company = await Company.create({ name: 'test' });
         const user = await User.create({
           name: 'Test User',
-          role: UserRole.corporateSecretary,
+          role,
           companyId: company.id,
         });
 
@@ -107,7 +108,8 @@ describe('TicketsController', () => {
         expect(ticket.status).toBe(TicketStatus.open);
       });
 
-      it('if there are multiple secretaries, throw', async () => {
+      // Skip due to Change Request 1
+      it.skip('if there are multiple secretaries, throw', async () => {
         const company = await Company.create({ name: 'test' });
         await User.create({
           name: 'Test User',
@@ -132,7 +134,29 @@ describe('TicketsController', () => {
         );
       });
 
-      it('if there is no secretary, throw', async () => {
+      it('if there is both secretary and director, secretary should be assignee', async () => {
+        const company = await Company.create({ name: 'test' })
+
+        const secretaryUser = await User.create({
+          name: 'Test Secretary',
+          role: UserRole.corporateSecretary,
+          companyId: company.id,
+        });
+        await User.create({
+          name: 'Test Director',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+
+        const ticket = await  controller.create({
+          companyId: company.id,
+          type: TicketType.registrationAddressChange,
+        });
+
+        expect(ticket.assigneeId).toBe(secretaryUser.id)
+      })
+
+      it('if there is no secretary nor single director, throw', async () => {
         const company = await Company.create({ name: 'test' });
 
         await expect(
@@ -142,10 +166,14 @@ describe('TicketsController', () => {
           }),
         ).rejects.toEqual(
           new ConflictException(
-            `Cannot find user with role corporateSecretary to create a ticket`,
+            `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
           ),
         );
       });
     });
+
+    // describe('strikeOff', () => {
+
+    // })
   });
 });
