@@ -2,6 +2,7 @@ import { ConflictException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Company } from '../../db/models/Company';
 import {
+  Ticket,
   TicketCategory,
   TicketStatus,
   TicketType,
@@ -91,22 +92,22 @@ describe('TicketsController', () => {
     describe('registrationAddressChange', () => {
       it.each([UserRole.corporateSecretary, UserRole.director])
         ('creates registrationAddressChange ticket (with %s assignee)', async (role) => {
-        const company = await Company.create({ name: 'test' });
-        const user = await User.create({
-          name: 'Test User',
-          role,
-          companyId: company.id,
-        });
+          const company = await Company.create({ name: 'test' });
+          const user = await User.create({
+            name: 'Test User',
+            role,
+            companyId: company.id,
+          });
 
-        const ticket = await controller.create({
-          companyId: company.id,
-          type: TicketType.registrationAddressChange,
-        });
+          const ticket = await controller.create({
+            companyId: company.id,
+            type: TicketType.registrationAddressChange,
+          });
 
-        expect(ticket.category).toBe(TicketCategory.corporate);
-        expect(ticket.assigneeId).toBe(user.id);
-        expect(ticket.status).toBe(TicketStatus.open);
-      });
+          expect(ticket.category).toBe(TicketCategory.corporate);
+          expect(ticket.assigneeId).toBe(user.id);
+          expect(ticket.status).toBe(TicketStatus.open);
+        });
 
       // Skip due to Change Request 1
       it.skip('if there are multiple secretaries, throw', async () => {
@@ -148,7 +149,7 @@ describe('TicketsController', () => {
           companyId: company.id,
         });
 
-        const ticket = await  controller.create({
+        const ticket = await controller.create({
           companyId: company.id,
           type: TicketType.registrationAddressChange,
         });
@@ -170,10 +171,34 @@ describe('TicketsController', () => {
           ),
         );
       });
+
+      it('should throw if there is already an open ticket for registration address change', async () => {
+        // Arrange
+        const company = await Company.create({ name: 'test' });
+        const user = await User.create({
+          name: 'Test User',
+          role: UserRole.corporateSecretary,
+          companyId: company.id,
+        });
+        await Ticket.create({
+          companyId: company.id,
+          assigneeId: user.id,
+          category: TicketCategory.corporate,
+          type: TicketType.registrationAddressChange,
+          status: TicketStatus.open,
+        });
+
+        // Act & Assert
+        await expect(
+          controller.create({
+            companyId: company.id,
+            type: TicketType.registrationAddressChange,
+          })).rejects.toEqual(
+            new ConflictException(
+              `There is already an open ticket for registration address change`,
+            ),
+          );
+      });
     });
-
-    // describe('strikeOff', () => {
-
-    // })
   });
 });

@@ -8,7 +8,7 @@ import {
 } from '../../db/models/Ticket';
 import { User, UserRole } from '../../db/models/User';
 
-interface newTicketDto extends Pick<Ticket, 'type' | 'companyId'> {}
+interface newTicketDto extends Pick<Ticket, 'type' | 'companyId'> { }
 
 interface TicketDto {
   id: number;
@@ -47,19 +47,19 @@ export class TicketsController {
       throw new ConflictException(`Invalid ticket type: ${type}`);
     }
 
-    if(type === TicketType.registrationAddressChange) {
+    if (type === TicketType.registrationAddressChange) {
       const existingTicket = await Ticket.findOne({
         where: {
           companyId,
           type: TicketType.registrationAddressChange,
           // TODO: Likely an open ticket should be checked
-          status: TicketStatus.open, 
+          status: TicketStatus.open,
         },
       })
 
-      if(existingTicket) {
+      if (existingTicket) {
         throw new ConflictException(
-          `There is already an open ticket for registration address change for company with ID ${companyId}`,
+          `There is already an open ticket for registration address change`,
         );
       }
 
@@ -74,12 +74,12 @@ export class TicketsController {
       );
       const directors = companyUsers.filter(
         (user) => user.role === UserRole.director,
-      );  
+      );
 
       if (corpSecs.length === 0 && directors.length !== 1) {
-          throw new ConflictException(
-            `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
-          );
+        throw new ConflictException(
+          `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
+        );
       }
 
       const assignee = corpSecs[0] ?? directors[0];
