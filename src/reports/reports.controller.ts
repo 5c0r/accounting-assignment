@@ -3,7 +3,7 @@ import { ReportsService } from './reports.service';
 
 @Controller('api/v1/reports')
 export class ReportsController {
-  constructor(private reportsService: ReportsService) {}
+  constructor(private reportsService: ReportsService) { }
 
   @Get()
   report() {
@@ -16,10 +16,11 @@ export class ReportsController {
 
   @Post()
   @HttpCode(201)
-  generate() {
+  async generate() {
     this.reportsService.accounts();
     this.reportsService.yearly();
-    this.reportsService.fs();
+    this.reportsService.financialStatement();
+
     return { message: 'finished' };
   }
 }
