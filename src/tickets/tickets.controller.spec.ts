@@ -10,6 +10,7 @@ import {
 import { User, UserRole } from '../../db/models/User';
 import { DbModule } from '../db.module';
 import { TicketsController } from './tickets.controller';
+import { Op } from 'sequelize';
 
 describe('TicketsController', () => {
   let controller: TicketsController;
@@ -200,5 +201,102 @@ describe('TicketsController', () => {
           );
       });
     });
+
+    describe('strikeOff', () => {
+      it('should create ticket', async () => {
+        // Arrange
+        const company = await Company.create({ name: 'test' });
+        const directorUser = await User.create({
+          name: 'Test User',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+
+        // Act
+        const ticket = await controller.create({
+          companyId: company.id,
+          type: TicketType.strikeOff,
+        });
+
+        expect(ticket.type).toBe(TicketType.strikeOff);
+        expect(ticket.category).toBe(TicketCategory.management);
+        expect(ticket.assigneeId).toBe(directorUser.id);
+        expect(ticket.status).toBe(TicketStatus.open);
+      });
+
+      it('should resolve all active tickets for the company', async () => {
+        // Arrange
+        const company = await Company.create({ name: 'test' });
+        const user = await User.create({
+          name: 'Test User',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+        await Ticket.create({
+          companyId: company.id,
+          assigneeId: user.id,
+          category: TicketCategory.management,
+          type: TicketType.managementReport,
+          status: TicketStatus.open,
+        });
+
+        // Act
+        await controller.create({
+          companyId: company.id,
+          type: TicketType.strikeOff,
+        });
+
+        // Assert
+        const allTickets = await Ticket.findAll({
+          where: {
+            companyId: company.id, type: {
+              [Op.not]: TicketType.strikeOff,
+            }
+          },
+        });
+        expect(allTickets.some(t => t.status === TicketStatus.open)).toBeFalsy();
+      });
+
+
+      it('should throw if there are multiple directors', async () => {
+        const company = await Company.create({ name: 'test' });
+        await User.create({
+          name: 'Test User 1',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+        await User.create({
+          name: 'Test User 2',
+          role: UserRole.director,
+          companyId: company.id,
+        });
+
+        await expect(
+          controller.create({
+            companyId: company.id,
+            type: TicketType.strikeOff,
+          }),
+        ).rejects.toEqual(
+          new ConflictException(
+            `Cannot create strike off ticket, there should be exactly one director`,
+          ),
+        );
+      });
+      it('should throw if there is no directors to be assigned', async () => {
+        const company = await Company.create({ name: 'test' });
+
+        await expect(
+          controller.create({
+            companyId: company.id,
+            type: TicketType.strikeOff,
+          }),
+        ).rejects.toEqual(
+          new ConflictException(
+            `Cannot create strike off ticket, there should be exactly one director`,
+          ),
+        );
+      });
+
+    })
   });
 });

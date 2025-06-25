@@ -107,12 +107,9 @@ time to get the results. Maybe this is a good time to refactor the code.
 
 **Instructions**
 
-1. Optimize the endpoint so that the time it takes to finish an action
-   is marginally faster.
-2. The endpoint should not hold the connection of the client while processing
-   the data in the background.
-3. We are looking for performance, not accuracy. If you see numbers not 
-   tallying correctly in the report, you may skip it.
+1. Optimize the endpoint so that the time it takes to finish an action is marginally faster.
+2. The endpoint should not hold the connection of the client while processing the data in the background.
+3. We are looking for performance, not accuracy. If you see numbers not tallying correctly in the report, you may skip it.
 
 **Acceptance**
 
