@@ -7,6 +7,7 @@ import {
   TicketType,
 } from '../../db/models/Ticket';
 import { User, UserRole } from '../../db/models/User';
+import { Op } from 'sequelize';
 
 interface newTicketDto extends Pick<Ticket, 'type' | 'companyId'> { }
 
@@ -46,8 +47,55 @@ export class TicketsController {
     if (!category) {
       throw new ConflictException(`Invalid ticket type: ${type}`);
     }
+    if (type === TicketType.strikeOff) {
 
-    if (type === TicketType.registrationAddressChange) {
+      const directors = await User.findAll({
+        where: { companyId, role: UserRole.director },
+        limit: 2,
+      });
+
+      if (directors.length !== 1) {
+        throw new ConflictException(
+          `Cannot create strike off ticket, there should be exactly one director`,
+        );
+      }
+
+      const closeOpenTicketTask = Ticket.update(
+        { status: TicketStatus.resolved },
+        {
+          where: {
+            companyId,
+            type: {
+              [Op.not]: TicketType.strikeOff,
+            },
+            status: TicketStatus.open,
+          },
+        },
+      );
+
+      const newStrikeOffTicketTask = Ticket.create({
+        companyId,
+        assigneeId: directors[0].id,
+        category: TicketCategory.management,
+        type: TicketType.strikeOff,
+        status: TicketStatus.open,
+      });
+
+      const [_, newStrikeOffTicket] = await Promise.all([closeOpenTicketTask, newStrikeOffTicketTask]);
+
+      const ticketDto: TicketDto = {
+        id: newStrikeOffTicket.id,
+        type: newStrikeOffTicket.type,
+        assigneeId: newStrikeOffTicket.assigneeId,
+        status: newStrikeOffTicket.status,
+        category: newStrikeOffTicket.category,
+        companyId: newStrikeOffTicket.companyId,
+      };
+
+      return ticketDto;
+
+    }
+    else if (type === TicketType.registrationAddressChange) {
       const existingTicket = await Ticket.findOne({
         where: {
           companyId,
