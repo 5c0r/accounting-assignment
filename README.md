@@ -138,9 +138,6 @@ Asynchronous
 }
 ```
 
-
-
-
 ## Stretch Tasks
 
 There are common principles in the repository that are intentionally 
@@ -152,10 +149,10 @@ considered in our code review session.
 
 Here are some of the topics you can consider:
 
-- [ ]  Code Quality
-- [ ]  Fixing Subtle Errors
-- [ ]  Using Tests
-- [ ]  Performance Considerations
+- [X]  Code Quality
+- [X]  Fixing Subtle Errors
+- [X]  Using Tests
+- [X]  Performance Considerations
 
 # Project setup and run
 
