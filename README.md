@@ -118,6 +118,29 @@ time to get the results. Maybe this is a good time to refactor the code.
    to check the status of the processing.
 3. Metrics should be recorded for discussion.
 
+** Baseline **
+Synchronous
+```
+{
+    "accounts.csv": "finished in 3.16",
+    "yearly.csv": "finished in 2.31",
+    "fs.csv": "finished in 3.20"
+}
+```
+
+** After improvements **
+Asynchronous
+```
+{
+    "accounts.csv": "finished in 5.52",
+    "yearly.csv": "finished in 5.51",
+    "fs.csv": "finished in 5.51"
+}
+```
+
+
+
+
 ## Stretch Tasks
 
 There are common principles in the repository that are intentionally 
