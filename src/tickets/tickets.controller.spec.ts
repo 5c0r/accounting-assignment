@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Company } from '../../db/models/Company';
 import {
@@ -46,6 +46,7 @@ describe('TicketsController', () => {
           type: TicketType.managementReport,
         });
 
+        expect(ticket).toBeTruthy();
         expect(ticket.category).toBe(TicketCategory.accounting);
         expect(ticket.assigneeId).toBe(user.id);
         expect(ticket.status).toBe(TicketStatus.open);
@@ -83,7 +84,7 @@ describe('TicketsController', () => {
             type: TicketType.managementReport,
           }),
         ).rejects.toEqual(
-          new ConflictException(
+          new BadRequestException(
             `Cannot find user with role accountant to create a ticket`,
           ),
         );
@@ -130,7 +131,7 @@ describe('TicketsController', () => {
             type: TicketType.registrationAddressChange,
           }),
         ).rejects.toEqual(
-          new ConflictException(
+          new BadRequestException(
             `Multiple users with role corporateSecretary. Cannot create a ticket`,
           ),
         );
@@ -167,7 +168,7 @@ describe('TicketsController', () => {
             type: TicketType.registrationAddressChange,
           }),
         ).rejects.toEqual(
-          new ConflictException(
+          new BadRequestException(
             `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
           ),
         );
@@ -195,7 +196,7 @@ describe('TicketsController', () => {
             companyId: company.id,
             type: TicketType.registrationAddressChange,
           })).rejects.toEqual(
-            new ConflictException(
+            new BadRequestException(
               `There is already an open ticket for registration address change`,
             ),
           );
@@ -277,7 +278,7 @@ describe('TicketsController', () => {
             type: TicketType.strikeOff,
           }),
         ).rejects.toEqual(
-          new ConflictException(
+          new BadRequestException(
             `Cannot create strike off ticket, there should be exactly one director`,
           ),
         );
@@ -291,7 +292,7 @@ describe('TicketsController', () => {
             type: TicketType.strikeOff,
           }),
         ).rejects.toEqual(
-          new ConflictException(
+          new BadRequestException(
             `Cannot create strike off ticket, there should be exactly one director`,
           ),
         );
