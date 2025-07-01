@@ -30,6 +30,7 @@ const memoizedCsvProcess = memoize(processCsvWithPapa, {
 
 @Injectable()
 export class ReportsService {
+  private readonly tmpDir = 'tmp';
   private states = {
     accounts: 'idle',
     yearly: 'idle',
@@ -49,14 +50,13 @@ export class ReportsService {
   async accounts() {
     this.states.accounts = 'starting';
     const start = performance.now();
-    const tmpDir = 'tmp';
     const outputFile = 'out/accounts.csv';
     const accountBalances: Record<string, number> = {};
     const csvFilesInFolder = this.readFilesInTmpFolder();
     console.log(`Processing ${csvFilesInFolder.length} CSV files with a parallel limit of ${this.parallelLimit}`);
 
     for await (const lines of asyncPool(this.parallelLimit, csvFilesInFolder,
-      (file) => memoizedCsvProcess(path.join(tmpDir, file)))) {
+      (file) => memoizedCsvProcess(path.join(this.tmpDir, file)))) {
       for (const line of lines) {
         const [, account, , debit, credit] = line;
         if (!accountBalances[account]) {
@@ -71,19 +71,18 @@ export class ReportsService {
     for (const [account, balance] of Object.entries(accountBalances)) {
       output.push(`${account},${balance.toFixed(2)}`);
     }
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.promises.writeFile(outputFile, output.join('\n'));
     this.states.accounts = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 
   async yearly() {
     this.states.yearly = 'starting';
     const start = performance.now();
-    const tmpDir = 'tmp';
     const outputFile = 'out/yearly.csv';
     const csvFilesInFolder = this.readFilesInTmpFolder();
     const cashByYear: Record<string, number> = {};
 
-    for await (const lines of asyncPool(this.parallelLimit, csvFilesInFolder, (file) => memoizedCsvProcess(path.join(tmpDir, file)))) {
+    for await (const lines of asyncPool(this.parallelLimit, csvFilesInFolder, (file) => memoizedCsvProcess(path.join(this.tmpDir, file)))) {
       for (const line of lines) {
         const [date, account, , debit, credit] = line;
         if (account === 'Cash') {
@@ -103,14 +102,13 @@ export class ReportsService {
       .forEach((year) => {
         output.push(`${year},${cashByYear[year].toFixed(2)}`);
       });
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.promises.writeFile(outputFile, output.join('\n'));
     this.states.yearly = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 
   async financialStatement() {
     this.states.fs = 'starting';
     const start = performance.now();
-    const tmpDir = 'tmp';
     const outputFile = 'out/fs.csv';
     const csvFilesInFolder = this.readFilesInTmpFolder();
     const categories = {
@@ -153,7 +151,7 @@ export class ReportsService {
       }
     }
     for await (const lines of asyncPool(this.parallelLimit, csvFilesInFolder,
-      (file) => memoizedCsvProcess(path.join(tmpDir, file)))) {
+      (file) => memoizedCsvProcess(path.join(this.tmpDir, file)))) {
       for (const line of lines) {
         const [, account, , debit, credit] = line;
 
@@ -218,7 +216,7 @@ export class ReportsService {
     output.push(
       `Assets = Liabilities + Equity, ${totalAssets.toFixed(2)} = ${(totalLiabilities + totalEquity).toFixed(2)}`,
     );
-    fs.writeFileSync(outputFile, output.join('\n'));
+    await fs.promises.writeFile(outputFile, output.join('\n'));
     this.states.fs = `finished in ${((performance.now() - start) / 1000).toFixed(2)}`;
   }
 }

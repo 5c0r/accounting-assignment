@@ -1,4 +1,4 @@
-import { Body, ConflictException, Controller, Get, Post } from '@nestjs/common';
+import { Body, BadRequestException, Controller, Get, Post, HttpCode, InternalServerErrorException } from '@nestjs/common';
 import { Company } from '../../db/models/Company';
 import {
   Ticket,
@@ -8,8 +8,15 @@ import {
 } from '../../db/models/Ticket';
 import { User, UserRole } from '../../db/models/User';
 import { Op } from 'sequelize';
+import { Sequelize } from 'sequelize-typescript';
+import { IsEnum, IsInt } from 'class-validator';
 
-interface newTicketDto extends Pick<Ticket, 'type' | 'companyId'> { }
+class NewTicketDto {
+  @IsEnum(TicketType)
+  type: TicketType;
+  @IsInt()
+  companyId: number;
+}
 
 interface TicketDto {
   id: number;
@@ -34,65 +41,86 @@ const TicketTypeToUserRole: Record<TicketType, UserRole> = {
 
 @Controller('api/v1/tickets')
 export class TicketsController {
+
+  constructor(private readonly sequelize: Sequelize) { }
+
   @Get()
+  @HttpCode(200)
   async findAll() {
     return await Ticket.findAll({ include: [Company, User] });
   }
 
   @Post()
-  async create(@Body() newTicketDto: newTicketDto) {
+  @HttpCode(201)
+  @HttpCode(400)
+  async create(@Body() newTicketDto: NewTicketDto): Promise<TicketDto> {
     const { type, companyId } = newTicketDto;
 
     const category = TicketTypeToCategory[type];
     if (!category) {
-      throw new ConflictException(`Invalid ticket type: ${type}`);
+      throw new BadRequestException(`Invalid ticket type: ${type}`);
     }
+
+    // Validate companyId exists
+    const company = await Company.findByPk(companyId);
+    if (!company) {
+      throw new BadRequestException(`Company with id ${companyId} does not exist`);
+    }
+
     if (type === TicketType.strikeOff) {
+      try {
+        const directors = await User.findAll({
+          where: { companyId, role: UserRole.director },
+          limit: 2,
+        });
 
-      const directors = await User.findAll({
-        where: { companyId, role: UserRole.director },
-        limit: 2,
-      });
+        if (directors.length !== 1) {
+          throw new BadRequestException(
+            `Cannot create strike off ticket, there should be exactly one director`,
+          );
+        }
+        await this.sequelize.transaction(async (transaction) => {
+          const closeOpenTicketTask = Ticket.update(
+            { status: TicketStatus.resolved },
+            {
+              where: {
+                companyId,
+                type: {
+                  [Op.not]: TicketType.strikeOff,
+                },
+                status: TicketStatus.open,
+              },
+              transaction
+            },
+          );
 
-      if (directors.length !== 1) {
-        throw new ConflictException(
-          `Cannot create strike off ticket, there should be exactly one director`,
+          const newStrikeOffTicketTask = Ticket.create({
+            companyId,
+            assigneeId: directors[0].id,
+            category: TicketCategory.management,
+            type: TicketType.strikeOff,
+            status: TicketStatus.open,
+          }, { transaction });
+
+          const [_, newStrikeOffTicket] = await Promise.all([closeOpenTicketTask, newStrikeOffTicketTask]);
+
+          const ticketDto: TicketDto = {
+            id: newStrikeOffTicket.id,
+            type: newStrikeOffTicket.type,
+            assigneeId: newStrikeOffTicket.assigneeId,
+            status: newStrikeOffTicket.status,
+            category: newStrikeOffTicket.category,
+            companyId: newStrikeOffTicket.companyId,
+          };
+
+          return ticketDto;
+        });
+
+      } catch (error) {
+        throw new InternalServerErrorException(
+          `Failed to create strike off ticket: ${error.message}`,
         );
       }
-
-      const closeOpenTicketTask = Ticket.update(
-        { status: TicketStatus.resolved },
-        {
-          where: {
-            companyId,
-            type: {
-              [Op.not]: TicketType.strikeOff,
-            },
-            status: TicketStatus.open,
-          },
-        },
-      );
-
-      const newStrikeOffTicketTask = Ticket.create({
-        companyId,
-        assigneeId: directors[0].id,
-        category: TicketCategory.management,
-        type: TicketType.strikeOff,
-        status: TicketStatus.open,
-      });
-
-      const [_, newStrikeOffTicket] = await Promise.all([closeOpenTicketTask, newStrikeOffTicketTask]);
-
-      const ticketDto: TicketDto = {
-        id: newStrikeOffTicket.id,
-        type: newStrikeOffTicket.type,
-        assigneeId: newStrikeOffTicket.assigneeId,
-        status: newStrikeOffTicket.status,
-        category: newStrikeOffTicket.category,
-        companyId: newStrikeOffTicket.companyId,
-      };
-
-      return ticketDto;
 
     }
     else if (type === TicketType.registrationAddressChange) {
@@ -100,13 +128,12 @@ export class TicketsController {
         where: {
           companyId,
           type: TicketType.registrationAddressChange,
-          // TODO: Likely an open ticket should be checked
           status: TicketStatus.open,
         },
       })
 
       if (existingTicket) {
-        throw new ConflictException(
+        throw new BadRequestException(
           `There is already an open ticket for registration address change`,
         );
       }
@@ -125,7 +152,7 @@ export class TicketsController {
       );
 
       if (corpSecs.length === 0 && directors.length !== 1) {
-        throw new ConflictException(
+        throw new BadRequestException(
           `Cannot find any corporate secretary or single director to create a ticket for registration address change`,
         );
       }
@@ -151,42 +178,41 @@ export class TicketsController {
 
       return ticketDto;
 
-    } else {
-      const userRole = TicketTypeToUserRole[type];
-      if (!userRole) {
-        throw new ConflictException(`Invalid user role for ticket type: ${type}`);
-      }
-
-      const assignees = await User.findAll({
-        where: { companyId, role: userRole },
-        order: [['createdAt', 'DESC']],
-      });
-
-      if (!assignees.length)
-        throw new ConflictException(
-          `Cannot find user with role ${userRole} to create a ticket`,
-        );
-
-      const assignee = assignees[0];
-
-      const ticket = await Ticket.create({
-        companyId,
-        assigneeId: assignee.id,
-        category,
-        type,
-        status: TicketStatus.open,
-      });
-
-      const ticketDto: TicketDto = {
-        id: ticket.id,
-        type: ticket.type,
-        assigneeId: ticket.assigneeId,
-        status: ticket.status,
-        category: ticket.category,
-        companyId: ticket.companyId,
-      };
-
-      return ticketDto;
     }
+    const userRole = TicketTypeToUserRole[type];
+    if (!userRole) {
+      throw new BadRequestException(`Invalid user role for ticket type: ${type}`);
+    }
+
+    const assignees = await User.findAll({
+      where: { companyId, role: userRole },
+      order: [['createdAt', 'DESC']],
+    });
+
+    if (!assignees.length)
+      throw new BadRequestException(
+        `Cannot find user with role ${userRole} to create a ticket`,
+      );
+
+    const assignee = assignees[0];
+
+    const ticket = await Ticket.create({
+      companyId,
+      assigneeId: assignee.id,
+      category,
+      type,
+      status: TicketStatus.open,
+    });
+
+    const ticketDto: TicketDto = {
+      id: ticket.id,
+      type: ticket.type,
+      assigneeId: ticket.assigneeId,
+      status: ticket.status,
+      category: ticket.category,
+      companyId: ticket.companyId,
+    };
+
+    return ticketDto;
   }
 }
